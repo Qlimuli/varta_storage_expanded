@@ -21,15 +21,15 @@
           "scan_interval_cgi": "Scan Interval CGI (seconds)"
         },
         "data_description": {
-          "host": "Host / IP for Modbus",
+          "host": "Host / IP for Modbus connection",
           "password": "Not all devices provide CGI Endpoints. If so, the integration will fetch additional data. Leave empty if you have a CGI endpoint but no password auth",
-          "cgi": "Fetch also data from the CGI Endpoint",
-          "host_cgi": "Host / IP for CGI Endpoint",
-          "port": "Port the Modbus server is listening",
-          "scan_interval_modbus": "Frequency of polling new data from the device in seconds",
-          "scan_interval_cgi": "Frequency of polling new data from the CGI Endpoint in seconds"
+          "cgi": "Fetch additional data from the CGI Endpoint (provides more sensors including energy totals, temperatures, voltages)",
+          "host_cgi": "Host / IP for CGI Endpoint (leave empty to use Modbus host)",
+          "port": "Port the Modbus server is listening on (default: 502)",
+          "scan_interval_modbus": "Frequency of polling Modbus data in seconds (recommended: 3-10)",
+          "scan_interval_cgi": "Frequency of polling CGI data in seconds (recommended: 10-60)"
         },
-        "description": "Provide the relevant connection details. Please refer to the documentation if a field is unclear."
+        "description": "Configure your VARTA Storage connection. The integration provides Modbus sensors (real-time power data) and optional CGI sensors (energy totals, temperatures, voltages). Calculated sensors for efficiency and self-sufficiency rates are also included."
       }
     }
   },
@@ -42,20 +42,69 @@
           "cgi": "Enable CGI",
           "host_cgi": "Host / IP for CGI Endpoint",
           "port": "Port (Modbus)",
-          "scan_interval_modbus": "Scan Interval (seconds)",
+          "scan_interval_modbus": "Scan Interval Modbus (seconds)",
           "username": "Username (CGI)",
           "scan_interval_cgi": "Scan Interval CGI (seconds)"
         },
         "data_description": {
-          "host": "Host / IP for Modbus",
+          "host": "Host / IP for Modbus connection",
           "password": "Not all devices provide CGI Endpoints. If so, the integration will fetch additional data. Leave empty if you have a CGI endpoint but no password auth",
-          "cgi": "Fetch also data from the CGI Endpoint",
-          "host_cgi": "Host / IP for CGI Endpoint",
-          "port": "Port the Modbus server is listening",
-          "scan_interval_modbus": "Frequency of polling new data from the device in seconds",
-          "scan_interval_cgi": "Frequency of polling new data from the CGI Endpoint in seconds"
+          "cgi": "Fetch additional data from the CGI Endpoint (provides more sensors including energy totals, temperatures, voltages)",
+          "host_cgi": "Host / IP for CGI Endpoint (leave empty to use Modbus host)",
+          "port": "Port the Modbus server is listening on (default: 502)",
+          "scan_interval_modbus": "Frequency of polling Modbus data in seconds (recommended: 3-10)",
+          "scan_interval_cgi": "Frequency of polling CGI data in seconds (recommended: 10-60)"
         },
-        "description": "These values allow tweaking the VARTA Storage Integration. Please refer to the documentation if a field is unclear."
+        "description": "Configure your VARTA Storage integration settings. Lower scan intervals provide more responsive data but increase network traffic."
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "stateOfCharge": {
+        "name": "State of Charge"
+      },
+      "gridPower": {
+        "name": "Grid Power"
+      },
+      "gridPowerToGrid": {
+        "name": "Power To Grid"
+      },
+      "gridPowerFromGrid": {
+        "name": "Power From Grid"
+      },
+      "powerActive": {
+        "name": "Active Power"
+      },
+      "powerCharge": {
+        "name": "Charging Power"
+      },
+      "powerDischarge": {
+        "name": "Discharging Power"
+      },
+      "batteryEfficiency": {
+        "name": "Battery Round-Trip Efficiency"
+      },
+      "selfSufficiencyRate": {
+        "name": "Self-Sufficiency Rate"
+      },
+      "selfConsumptionRate": {
+        "name": "Self-Consumption Rate"
+      },
+      "dailyNetGridImport": {
+        "name": "Daily Net Grid Import"
+      },
+      "dailyNetGridExport": {
+        "name": "Daily Net Grid Export"
+      },
+      "availableEnergy": {
+        "name": "Available Energy"
+      },
+      "timeToEmpty": {
+        "name": "Time to Empty"
+      },
+      "timeToFull": {
+        "name": "Time to Full"
       }
     }
   }
