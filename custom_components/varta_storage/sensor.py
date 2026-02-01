@@ -25,6 +25,8 @@ from .const import (
     SENSORS_RIEMANN,
     SensorCategory,
     VartaSensorEntityDescription,
+    get_error_text,
+    get_state_text,
 )
 
 
@@ -118,10 +120,24 @@ class VartaStorageEntity(CoordinatorEntity, SensorEntity):
 
         value = self.coordinator.data.get(self.entity_description.source_key)
 
-        # Handle special cases for apparent power (convert to W)
+        # Handle special cases for apparent power (convert to VA)
         if self.entity_description.key == "powerApparent" and value is not None:
-            # The library returns apparent power - ensure it's in W
+            # The library returns apparent power - ensure it's positive
             value = abs(value) if value is not None else None
+
+        # Convert state code to human-readable text
+        elif self.entity_description.key == "stateTextDerived" and value is not None:
+            try:
+                value = get_state_text(int(value))
+            except (ValueError, TypeError):
+                value = f"Unknown State ({value})"
+
+        # Convert error code to human-readable text
+        elif self.entity_description.key == "errorText" and value is not None:
+            try:
+                value = get_error_text(int(value))
+            except (ValueError, TypeError):
+                value = f"Unknown Error ({value})"
 
         self._attr_native_value = value
         self.async_write_ha_state()

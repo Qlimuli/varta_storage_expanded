@@ -1,7 +1,7 @@
 {
   "domain": "varta_storage",
   "name": "VARTA Storage Expanded",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "codeowners": ["@Qlimuli"],
   "config_flow": true,
   "dependencies": [],
