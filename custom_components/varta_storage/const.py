@@ -14,6 +14,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.const import (
     PERCENTAGE,
+    UnitOfApparentPower,
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfEnergy,
@@ -31,6 +32,70 @@ DEFAULT_SCAN_INTERVAL_CGI = 10
 
 # Integration calculation interval (seconds)
 INTEGRATION_SCAN_INTERVAL = 60
+
+
+# ============================================================================
+# VARTA State Code Mappings (from Modbus documentation)
+# ============================================================================
+VARTA_STATE_MAP: Final[dict[int, str]] = {
+    0: "Busy (Beschaeftigt)",
+    1: "Run (Betrieb)",
+    2: "Charge (Laden)",
+    3: "Discharge (Entladen)",
+    4: "Standby",
+    5: "Error (Fehler)",
+    6: "Passive (Service)",
+    7: "Islanding (Inselbetrieb)",
+    8: "Grid Outage (Netzausfall)",
+    9: "Self Test (Selbsttest)",
+    10: "Update",
+    11: "Maintenance (Wartung)",
+}
+
+# ============================================================================
+# VARTA Error Code Mappings (from documentation)
+# ============================================================================
+VARTA_ERROR_MAP: Final[dict[int, str]] = {
+    0: "No Error (Kein Fehler)",
+    1: "General Error (Allgemeiner Fehler)",
+    2: "Battery Error (Batteriefehler)",
+    3: "Inverter Error (Wechselrichterfehler)",
+    4: "Grid Error (Netzfehler)",
+    5: "Communication Error (Kommunikationsfehler)",
+    6: "Temperature Error (Temperaturfehler)",
+    7: "Overcurrent (Ueberstrom)",
+    8: "Overvoltage (Ueberspannung)",
+    9: "Undervoltage (Unterspannung)",
+    10: "Overtemperature (Uebertemperatur)",
+    11: "Undertemperature (Untertemperatur)",
+    12: "Isolation Error (Isolationsfehler)",
+    13: "Cell Imbalance (Zellenungleichgewicht)",
+    14: "BMS Error (BMS-Fehler)",
+    15: "EMS Error (EMS-Fehler)",
+    16: "ENS Error (ENS-Fehler)",
+    17: "Fan Error (Luefterfehler)",
+    18: "Fuse Error (Sicherungsfehler)",
+    19: "Relay Error (Relaisfehler)",
+    20: "Sensor Error (Sensorfehler)",
+    # Add more as needed based on actual documentation
+    255: "Unknown Error (Unbekannter Fehler)",
+}
+
+
+def get_state_text(state_code: int | None) -> str:
+    """Convert state code to human-readable text."""
+    if state_code is None:
+        return "Unknown"
+    return VARTA_STATE_MAP.get(state_code, f"Unknown State ({state_code})")
+
+
+def get_error_text(error_code: int | None) -> str:
+    """Convert error code to human-readable text."""
+    if error_code is None:
+        return "Unknown"
+    if error_code == 0:
+        return "No Error (Kein Fehler)"
+    return VARTA_ERROR_MAP.get(error_code, f"Unknown Error ({error_code})")
 
 
 class SensorCategory(StrEnum):
@@ -68,23 +133,25 @@ SENSORS_MODBUS: Final[tuple[VartaSensorEntityDescription, ...]] = (
     ),
     VartaSensorEntityDescription(
         key="state",
-        name="VARTA State Number",
+        name="VARTA State Code",
         source_key="state",
         device_class=None,
         state_class=None,
         native_unit_of_measurement=None,
         category=SensorCategory.MODBUS,
         icon="mdi:information-outline",
+        entity_registry_enabled_default=False,
     ),
     VartaSensorEntityDescription(
         key="stateText",
-        name="VARTA State",
+        name="VARTA State (Library)",
         source_key="state_text",
         device_class=None,
         state_class=None,
         native_unit_of_measurement=None,
         category=SensorCategory.MODBUS,
         icon="mdi:information",
+        entity_registry_enabled_default=False,
     ),
     VartaSensorEntityDescription(
         key="errorCode",
@@ -95,6 +162,27 @@ SENSORS_MODBUS: Final[tuple[VartaSensorEntityDescription, ...]] = (
         native_unit_of_measurement=None,
         category=SensorCategory.MODBUS,
         icon="mdi:alert-circle-outline",
+        entity_registry_enabled_default=False,
+    ),
+    VartaSensorEntityDescription(
+        key="errorText",
+        name="VARTA Error",
+        source_key="error_code",  # We'll convert this in the sensor
+        device_class=None,
+        state_class=None,
+        native_unit_of_measurement=None,
+        category=SensorCategory.MODBUS,
+        icon="mdi:alert-circle",
+    ),
+    VartaSensorEntityDescription(
+        key="stateTextDerived",
+        name="VARTA Status",
+        source_key="state",  # We'll convert this in the sensor
+        device_class=None,
+        state_class=None,
+        native_unit_of_measurement=None,
+        category=SensorCategory.MODBUS,
+        icon="mdi:information",
     ),
     # Power Measurements
     VartaSensorEntityDescription(
@@ -143,7 +231,7 @@ SENSORS_MODBUS: Final[tuple[VartaSensorEntityDescription, ...]] = (
         source_key="apparent_power",
         device_class=SensorDeviceClass.APPARENT_POWER,
         state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=UnitOfPower.WATT,
+        native_unit_of_measurement=UnitOfApparentPower.VOLT_AMPERE,
         category=SensorCategory.MODBUS,
         icon="mdi:flash-outline",
     ),
