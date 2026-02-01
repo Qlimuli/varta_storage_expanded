@@ -1,0 +1,15 @@
+{
+  "domain": "varta_storage_expanded",
+  "name": "VARTA Storage Expanded",
+  "version": "0.1.9",
+  "codeowners": ["@Vip0r"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/Qlimuli/varta_storage_expanded",
+  "homekit": {},
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/Qlimuli/varta_storage_expanded/issues",
+  "requirements": ["vartastorage==0.4.3"],
+  "ssdp": [],
+  "zeroconf": []
+}
