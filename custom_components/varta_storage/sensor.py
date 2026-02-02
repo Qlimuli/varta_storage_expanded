@@ -307,11 +307,10 @@ class VartaCalculatedSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
                 description.suggested_display_precision
             )
 
-        # Daily tracking state
-        self._daily_import: float = 0.0
-        self._daily_export: float = 0.0
-        self._last_import_total: float | None = None
-        self._last_export_total: float | None = None
+        # Daily tracking state (for Riemann-based daily integration)
+        self._daily_value: float = 0.0
+        self._last_power: float | None = None
+        self._last_update: datetime | None = None
         self._last_reset_date: str | None = None
         self._unsub_interval: Any = None
 
@@ -324,6 +323,7 @@ class VartaCalculatedSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             if (last_state := await self.async_get_last_state()) is not None:
                 try:
                     self._attr_native_value = float(last_state.state)
+                    self._daily_value = float(last_state.state)
                     if last_state.attributes:
                         self._last_reset_date = last_state.attributes.get(
                             "last_reset_date"
@@ -360,9 +360,9 @@ class VartaCalculatedSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
 
         try:
             if key == "dailyNetGridImport":
-                value = self._calculate_daily_net_import(cgi_data)
+                value = self._calculate_daily_net_import(modbus_data)
             elif key == "dailyNetGridExport":
-                value = self._calculate_daily_net_export(cgi_data)
+                value = self._calculate_daily_net_export(modbus_data)
             elif key == "batteryEfficiency":
                 value = self._calculate_battery_efficiency(cgi_data)
             elif key == "selfSufficiencyRate":
@@ -385,49 +385,85 @@ class VartaCalculatedSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
         self._attr_native_value = value
         self.async_write_ha_state()
 
-    def _calculate_daily_net_import(self, cgi_data: dict) -> float | None:
-        """Calculate daily net grid import (consumption from grid)."""
+    def _calculate_daily_net_import(self, modbus_data: dict) -> float | None:
+        """Calculate daily net grid import using Riemann integration of from_grid_power.
+        
+        Uses the same approach as VartaRiemannSensor but resets daily.
+        """
         today = dt_util.now().date().isoformat()
 
         # Reset at midnight
         if self._last_reset_date != today:
-            self._daily_import = 0.0
-            self._last_import_total = None
+            self._daily_value = 0.0
+            self._last_power = None
+            self._last_update = None
             self._last_reset_date = today
 
-        current_total = cgi_data.get("total_grid_ac_dc")  # Energy from grid
-        if current_total is None:
-            return self._daily_import
+        current_power = modbus_data.get("from_grid_power")
+        if current_power is None:
+            return self._daily_value
 
-        if self._last_import_total is not None:
-            delta = current_total - self._last_import_total
-            if delta > 0:
-                self._daily_import += delta
+        # Ensure power is positive
+        current_power = abs(float(current_power))
+        current_time = dt_util.utcnow()
 
-        self._last_import_total = current_total
-        return round(self._daily_import, 3)
+        if self._last_power is not None and self._last_update is not None:
+            # Calculate time delta in hours
+            time_delta = (current_time - self._last_update).total_seconds() / 3600.0
 
-    def _calculate_daily_net_export(self, cgi_data: dict) -> float | None:
-        """Calculate daily net grid export (feed-in to grid)."""
+            if time_delta > 0 and time_delta < 1:  # Sanity check (max 1 hour gap)
+                # Trapezoidal integration: average of current and last power
+                avg_power = (current_power + self._last_power) / 2.0
+
+                # Convert W*h to kWh
+                energy_increment = (avg_power * time_delta) / 1000.0
+                self._daily_value += energy_increment
+
+        # Store current values for next iteration
+        self._last_power = current_power
+        self._last_update = current_time
+
+        return round(self._daily_value, 3)
+
+    def _calculate_daily_net_export(self, modbus_data: dict) -> float | None:
+        """Calculate daily net grid export using Riemann integration of to_grid_power.
+        
+        Uses the same approach as VartaRiemannSensor but resets daily.
+        """
         today = dt_util.now().date().isoformat()
 
         # Reset at midnight
         if self._last_reset_date != today:
-            self._daily_export = 0.0
-            self._last_export_total = None
+            self._daily_value = 0.0
+            self._last_power = None
+            self._last_update = None
             self._last_reset_date = today
 
-        current_total = cgi_data.get("total_grid_dc_ac")  # Energy to grid
-        if current_total is None:
-            return self._daily_export
+        current_power = modbus_data.get("to_grid_power")
+        if current_power is None:
+            return self._daily_value
 
-        if self._last_export_total is not None:
-            delta = current_total - self._last_export_total
-            if delta > 0:
-                self._daily_export += delta
+        # Ensure power is positive
+        current_power = abs(float(current_power))
+        current_time = dt_util.utcnow()
 
-        self._last_export_total = current_total
-        return round(self._daily_export, 3)
+        if self._last_power is not None and self._last_update is not None:
+            # Calculate time delta in hours
+            time_delta = (current_time - self._last_update).total_seconds() / 3600.0
+
+            if time_delta > 0 and time_delta < 1:  # Sanity check (max 1 hour gap)
+                # Trapezoidal integration: average of current and last power
+                avg_power = (current_power + self._last_power) / 2.0
+
+                # Convert W*h to kWh
+                energy_increment = (avg_power * time_delta) / 1000.0
+                self._daily_value += energy_increment
+
+        # Store current values for next iteration
+        self._last_power = current_power
+        self._last_update = current_time
+
+        return round(self._daily_value, 3)
 
     def _calculate_battery_efficiency(self, cgi_data: dict) -> float | None:
         """Calculate battery round-trip efficiency.
