@@ -1,5 +1,4 @@
 """Sensor platform of the VARTA Storage integration."""
-
 from __future__ import annotations
 
 from datetime import datetime, timedelta
@@ -91,14 +90,12 @@ class VartaStorageEntity(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator, description: VartaSensorEntityDescription):
         """Pass coordinator to CoordinatorEntity."""
         super().__init__(coordinator)
-
         self._attr_device_info = DeviceInfo(
             configuration_url=f"http://{coordinator.config_entry.data['host']}",
             identifiers={(DOMAIN, str(coordinator.config_entry.unique_id))},
             manufacturer="VARTA",
             name="VARTA Battery",
         )
-
         self.entity_description = description
         self._attr_unique_id = (
             f"{coordinator.config_entry.unique_id}-{self.entity_description.key}"
@@ -115,15 +112,15 @@ class VartaStorageEntity(CoordinatorEntity, SensorEntity):
         """Handle updated data from the coordinator."""
         if self.entity_description.source_key is None:
             raise ValueError(
-                "Invalid entity configuration: source_key is not set in varta entity description."
+                "Invalid entity configuration: source_key is not set "
+                "in varta entity description."
             )
 
         value = self.coordinator.data.get(self.entity_description.source_key)
 
-        # Handle special cases for apparent power (convert to VA)
+        # Handle special cases for apparent power (ensure positive)
         if self.entity_description.key == "powerApparent" and value is not None:
-            # The library returns apparent power - ensure it's positive
-            value = abs(value) if value is not None else None
+            value = abs(value)
 
         # Convert state code to human-readable text
         elif self.entity_description.key == "stateTextDerived" and value is not None:
@@ -160,7 +157,6 @@ class VartaRiemannSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
     ):
         """Initialize the Riemann integration sensor."""
         super().__init__(coordinator)
-
         self._hass = hass
         self._entry = entry
         self.entity_description = description
@@ -171,7 +167,6 @@ class VartaRiemannSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             manufacturer="VARTA",
             name="VARTA Battery",
         )
-
         self._attr_unique_id = (
             f"{coordinator.config_entry.unique_id}-{self.entity_description.key}"
         )
@@ -228,7 +223,6 @@ class VartaRiemannSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             return
 
         current_power = self.coordinator.data.get(source_key)
-
         if current_power is None:
             return
 
@@ -241,13 +235,11 @@ class VartaRiemannSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             # Calculate time delta in hours
             time_delta = (current_time - self._last_update).total_seconds() / 3600.0
 
-            if time_delta > 0 and time_delta < 1:  # Sanity check (max 1 hour gap)
+            if 0 < time_delta < 1:  # Sanity check (max 1 hour gap)
                 # Trapezoidal integration: average of current and last power
                 avg_power = (current_power + self._last_power) / 2.0
-
                 # Convert W*h to kWh
                 energy_increment = (avg_power * time_delta) / 1000.0
-
                 self._total_energy += energy_increment
 
         # Store current values for next iteration
@@ -285,7 +277,6 @@ class VartaCalculatedSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
     ):
         """Initialize the calculated sensor."""
         super().__init__(coordinator)
-
         self._hass = hass
         self._entry = entry
         self._cgi_coordinator = cgi_coordinator
@@ -297,7 +288,6 @@ class VartaCalculatedSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             manufacturer="VARTA",
             name="VARTA Battery",
         )
-
         self._attr_unique_id = (
             f"{coordinator.config_entry.unique_id}-{self.entity_description.key}"
         )
@@ -353,7 +343,11 @@ class VartaCalculatedSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             return
 
         modbus_data = self.coordinator.data
-        cgi_data = self._cgi_coordinator.data if self._cgi_coordinator else {}
+        cgi_data = (
+            self._cgi_coordinator.data
+            if self._cgi_coordinator and self._cgi_coordinator.data
+            else {}
+        )
 
         key = self.entity_description.key
         value = None
@@ -377,7 +371,6 @@ class VartaCalculatedSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
                 value = self._calculate_time_to_full(modbus_data)
             elif key == "totalPowerFlow":
                 value = self._calculate_total_power_flow(modbus_data)
-
         except (KeyError, TypeError, ZeroDivisionError) as e:
             LOGGER.debug("Error calculating %s: %s", key, e)
             value = None
@@ -387,7 +380,7 @@ class VartaCalculatedSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
 
     def _calculate_daily_net_import(self, modbus_data: dict) -> float | None:
         """Calculate daily net grid import using Riemann integration of from_grid_power.
-        
+
         Uses the same approach as VartaRiemannSensor but resets daily.
         """
         today = dt_util.now().date().isoformat()
@@ -411,10 +404,9 @@ class VartaCalculatedSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             # Calculate time delta in hours
             time_delta = (current_time - self._last_update).total_seconds() / 3600.0
 
-            if time_delta > 0 and time_delta < 1:  # Sanity check (max 1 hour gap)
+            if 0 < time_delta < 1:  # Sanity check (max 1 hour gap)
                 # Trapezoidal integration: average of current and last power
                 avg_power = (current_power + self._last_power) / 2.0
-
                 # Convert W*h to kWh
                 energy_increment = (avg_power * time_delta) / 1000.0
                 self._daily_value += energy_increment
@@ -427,7 +419,7 @@ class VartaCalculatedSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
 
     def _calculate_daily_net_export(self, modbus_data: dict) -> float | None:
         """Calculate daily net grid export using Riemann integration of to_grid_power.
-        
+
         Uses the same approach as VartaRiemannSensor but resets daily.
         """
         today = dt_util.now().date().isoformat()
@@ -451,10 +443,9 @@ class VartaCalculatedSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
             # Calculate time delta in hours
             time_delta = (current_time - self._last_update).total_seconds() / 3600.0
 
-            if time_delta > 0 and time_delta < 1:  # Sanity check (max 1 hour gap)
+            if 0 < time_delta < 1:  # Sanity check (max 1 hour gap)
                 # Trapezoidal integration: average of current and last power
                 avg_power = (current_power + self._last_power) / 2.0
-
                 # Convert W*h to kWh
                 energy_increment = (avg_power * time_delta) / 1000.0
                 self._daily_value += energy_increment
@@ -473,55 +464,94 @@ class VartaCalculatedSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
         charged = cgi_data.get("total_inverter_ac_dc")
         discharged = cgi_data.get("total_inverter_dc_ac")
 
-        if charged is None or discharged is None or charged == 0:
+        if charged is None or discharged is None or charged <= 0:
             return None
 
         efficiency = (discharged / charged) * 100
-        return min(efficiency, 100.0)  # Cap at 100%
+        return round(min(efficiency, 100.0), 1)  # Cap at 100%
 
     def _calculate_self_sufficiency(
         self, modbus_data: dict, cgi_data: dict
     ) -> float | None:
         """Calculate self-sufficiency rate (Autarkiequote).
 
-        Self-sufficiency = (1 - Grid Import / Total Consumption) * 100
-        Where Total Consumption = Grid Import + Battery Discharge + Direct PV Use
-        Simplified: (Total Consumption - Grid Import) / Total Consumption * 100
+        Self-sufficiency = (1 - GridImport / TotalConsumption) * 100
+
+        Energy balance at the AC bus (sources = sinks):
+          PV + GridImport + BatteryDischarge = Consumption + GridExport + BatteryCharge
+
+        Rearranged:
+          Consumption = GridImport - GridExport + BatteryDischarge - BatteryCharge + PV
+
+        Since PV generation is not directly measured by VARTA, we use the
+        minimum PV estimate (assuming no direct PV-to-house consumption):
+          PV_min = GridExport + BatteryCharge
+
+        Substituting:
+          Consumption ≈ GridImport + BatteryDischarge
+          Self-sufficiency ≈ 1 - GridImport / (GridImport + BatteryDischarge)
+                           = BatteryDischarge / (GridImport + BatteryDischarge) * 100
+
+        Note: This is a lower-bound estimate. Actual self-sufficiency is higher
+        because direct PV self-consumption is not captured in these counters.
+
+        Requires CGI lifetime energy totals to be available.
         """
-        grid_import = cgi_data.get("total_grid_ac_dc", 0)
-        battery_discharge = cgi_data.get("total_inverter_dc_ac", 0)
+        # FIX: No default value — returns None when CGI data is unavailable
+        grid_import = cgi_data.get("total_grid_ac_dc")
+        battery_discharge = cgi_data.get("total_inverter_dc_ac")
 
         if grid_import is None or battery_discharge is None:
             return None
 
-        total_consumption = grid_import + battery_discharge
-        if total_consumption == 0:
-            return 100.0  # No consumption = 100% self-sufficient
+        grid_import = max(float(grid_import), 0.0)
+        battery_discharge = max(float(battery_discharge), 0.0)
 
-        self_consumed = battery_discharge
-        rate = (self_consumed / total_consumption) * 100
-        return min(max(rate, 0.0), 100.0)
+        total_consumption = grid_import + battery_discharge
+        if total_consumption <= 0:
+            # FIX: No energy data recorded yet — return None instead of 100%
+            return None
+
+        rate = (battery_discharge / total_consumption) * 100.0
+        return round(min(max(rate, 0.0), 100.0), 1)
 
     def _calculate_self_consumption(
         self, modbus_data: dict, cgi_data: dict
     ) -> float | None:
         """Calculate self-consumption rate (Eigenverbrauchsquote).
 
-        Self-consumption = (1 - Grid Export / Total Generation) * 100
+        Self-consumption = (1 - GridExport / TotalGeneration) * 100
+
+        Since PV generation is not directly measured by VARTA, we estimate
+        the minimum total generation as:
+          PV_min = GridExport + BatteryCharge
+
+        Self-consumption ≈ 1 - GridExport / (GridExport + BatteryCharge)
+                         = BatteryCharge / (GridExport + BatteryCharge) * 100
+
+        Note: This is an upper-bound estimate. Actual self-consumption is lower
+        because true PV generation includes direct household consumption that
+        is not captured in these counters, making the denominator larger.
+
+        Requires CGI lifetime energy totals to be available.
         """
-        grid_export = cgi_data.get("total_grid_dc_ac", 0)
-        battery_charge = cgi_data.get("total_inverter_ac_dc", 0)
+        # FIX: No default value — returns None when CGI data is unavailable
+        grid_export = cgi_data.get("total_grid_dc_ac")
+        battery_charge = cgi_data.get("total_inverter_ac_dc")
 
         if grid_export is None or battery_charge is None:
             return None
 
-        total_generation = grid_export + battery_charge
-        if total_generation == 0:
-            return 100.0  # No generation means 100% self-consumption
+        grid_export = max(float(grid_export), 0.0)
+        battery_charge = max(float(battery_charge), 0.0)
 
-        self_consumed = total_generation - grid_export
-        rate = (self_consumed / total_generation) * 100
-        return min(max(rate, 0.0), 100.0)
+        total_generation = grid_export + battery_charge
+        if total_generation <= 0:
+            # FIX: No energy data recorded yet — return None instead of 100%
+            return None
+
+        rate = (battery_charge / total_generation) * 100.0
+        return round(min(max(rate, 0.0), 100.0), 1)
 
     def _calculate_available_energy(self, modbus_data: dict) -> float | None:
         """Calculate available energy in battery (Wh).
@@ -560,7 +590,12 @@ class VartaCalculatedSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
         capacity = modbus_data.get("installed_capacity")
         charge_power = modbus_data.get("charge_power", 0)
 
-        if soc is None or capacity is None or charge_power is None or charge_power <= 0:
+        if (
+            soc is None
+            or capacity is None
+            or charge_power is None
+            or charge_power <= 0
+        ):
             return None
 
         remaining_capacity = capacity * (100 - soc) / 100
@@ -572,13 +607,15 @@ class VartaCalculatedSensor(CoordinatorEntity, RestoreEntity, SensorEntity):
         """Calculate total absolute power flow (W)."""
         charge = abs(modbus_data.get("charge_power", 0) or 0)
         discharge = abs(modbus_data.get("discharge_power", 0) or 0)
-
         return charge + discharge
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return additional attributes for daily sensors."""
-        if self.entity_description.key in ("dailyNetGridImport", "dailyNetGridExport"):
+        if self.entity_description.key in (
+            "dailyNetGridImport",
+            "dailyNetGridExport",
+        ):
             return {"last_reset_date": self._last_reset_date}
         return None
 
